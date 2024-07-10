@@ -1,38 +1,36 @@
 # xfetch
 
-An important part of **[Cortex](https://github.com/neomannskar/cortex)** implemented as a standalone console application. **xfetch (cortex-fetch)** is a fetch tool which retrieves local files and directories for use in different projects.
+**xfetch** is an essential component of **[Cortex](https://github.com/neomannskar/cortex)**, implemented as a standalone console application. **xfetch** (_cortex-fetch_) serves as a fetch tool designed to retrieve local files and directories for use across different projects.
 
 ## Installation and Building
 
-**xfetch** is a small console application written in pure **C++17**. It has no other dependencies and can simply be compiled using your favorite C++ compiler, just make sure that the version supports the **C++17** standard or later.
+**xfetch** is a lightweight console application written in pure **C++17**. It has no external dependencies and can be compiled using your preferred C++ compiler, ensuring it supports the **C++17** standard or later.
 
-Start by cloning down this repository. Then navigate into the newly created directory and choose the appropriate command below:
-
+To get started, clone this repository and navigate to the newly created directory. Then, choose the appropriate command based on your compiler:
 ### GCC
 
 ```bash
 g++ -std=c++17 -o ./bin/xfetch ./src/main.cpp
 ```
-
 ### Clang
 
 ```bash
 clang++ -std=c++17 -o ./bin/xfetch ./src/main.cpp
 ```
 
-After the application has been successfully compiled, simply add the it to your system variables path.
+Once successfully compiled, add **xfetch** to your system's PATH variable.
 
-## How to use the application
+## How to Use the Application
 
-**xfetch** takes some commandline arguments as input and executes different actions based on those arguments. Start by invoking the program in the console.
+**xfetch** accepts command-line arguments to perform various actions. Begin by invoking the program in your terminal:
 
 ```bash
 xfetch
 ```
 
-If you invoke the program without providing any arguments it will simply print out the usage (path to the executable).
+Running **xfetch** without any arguments prints out usage information (the path to the executable).
 
-Now provide **xfetch** a type-specifier, the type is either a file (`file`) or a directory (`dir`).
+Specify a type-specifier (`file` or `dir`) to indicate whether you are fetching a file or a directory.
 
 ### File
 
@@ -46,20 +44,20 @@ xfetch file
 xfetch dir
 ```
 
-Alternatively you can use the type-specifier `folder` for directories if that suits you better.
+Alternatively, you can use `folder` as the type-specifier for directories if preferred.
 
 ```bash
 xfetch folder
 ```
 
-Finally specify the source path to the content you want to import. E.g:
+Finally, provide the source path of the content you wish to import. For example:
 
 ```bash
 xfetch file C:\dev\example\file.txt
 ```
 
-_Note that **xfetch** takes a source path as input and imports the content into the directory in which the application is currently running!_
+_Note: **xfetch** imports content into the current directory of the application and implements safeguards against accidental overwrites, requiring user confirmation._
 
-## Important
+## Future features
 
-**xfetch** protects against accidental overwriting and needs the user's confirmation when trying to overwrite files and directories.
+### 1. Path abstraction
