@@ -12,6 +12,38 @@
 #define ANSI_COLOR_BLUE "\x1b[34m"
 #define ANSI_COLOR_MAGENTA "\x1b[35m"
 
+#ifdef _WIN32
+#include <windows.h>
+
+bool IsRunningAsAdmin() {
+    PBOOL isAdmin = FALSE;
+    PSID adminGroup = NULL;
+    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+
+    if (AllocateAndInitializeSid(
+            &NtAuthority,
+            2,
+            SECURITY_BUILTIN_DOMAIN_RID,
+            DOMAIN_ALIAS_RID_ADMINS,
+            0, 0, 0, 0, 0, 0,
+            &adminGroup)) {
+        if (!CheckTokenMembership(NULL, adminGroup, isAdmin)) {
+            isAdmin = FALSE;
+        }
+        FreeSid(adminGroup);
+    }
+
+    return isAdmin;
+}
+
+#elif __linux__ || __APPLE__
+#include <unistd.h>
+
+bool IsRunningAsRoot() {
+    return geteuid() == 0;
+}
+#endif
+
 bool ask_for_overwrite(const std::filesystem::path& path) {
     std::string response;
     std::cerr << ANSI_BOLD_TEXT << ANSI_COLOR_MAGENTA << "Warning" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ": " 
@@ -42,7 +74,8 @@ void copy_file(const std::filesystem::path& source) {
                   << ANSI_BOLD_TEXT << ANSI_COLOR_BLUE << "~ Destination: " << ANSI_COLOR_YELLOW << destination << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << std::endl;
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << ANSI_BOLD_TEXT << ANSI_COLOR_MAGENTA << "Exception" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ":\n\t" 
-                  << ANSI_BOLD_TEXT << ANSI_COLOR_BLUE << "~ e.what()" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ": " << ANSI_COLOR_YELLOW << "\"" << e.what() << "\"" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << std::endl;
+                  << ANSI_BOLD_TEXT << ANSI_COLOR_BLUE << "~ e.what()" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ": " << ANSI_COLOR_YELLOW << "\"" << e.what() << "\"" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE 
+                  << "\n\t" << ANSI_BOLD_TEXT << ANSI_COLOR_BLUE << "~ e.code()" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ": " << ANSI_COLOR_YELLOW << "\"" << e.code().message() << "\"" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << std::endl;
     }
 }
 
@@ -54,6 +87,7 @@ void copy_directory(const std::filesystem::path& source) {
             return;
         }
 
+        // Check if destination exists and ask for overwrite permission
         std::filesystem::path destination = std::filesystem::current_path() / source.filename();
         if (std::filesystem::exists(destination)) {
             if (!ask_for_overwrite(destination)) {
@@ -63,6 +97,8 @@ void copy_directory(const std::filesystem::path& source) {
             }
             std::filesystem::remove_all(destination);
         }
+
+        // Create destination directory and copy files
         std::filesystem::create_directory(destination);
         for (const auto& entry : std::filesystem::recursive_directory_iterator(source)) {
             const auto& path = entry.path();
@@ -73,11 +109,27 @@ void copy_directory(const std::filesystem::path& source) {
                   << ANSI_BOLD_TEXT << ANSI_COLOR_BLUE << "~ Destination: " << ANSI_COLOR_YELLOW << destination << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << std::endl;
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << ANSI_BOLD_TEXT << ANSI_COLOR_MAGENTA << "Exception" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ":\n\t" 
-                  << ANSI_BOLD_TEXT << ANSI_COLOR_BLUE << "~ e.what()" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ": " << ANSI_COLOR_YELLOW << "\"" << e.what() << "\"" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << std::endl;
+                  << ANSI_BOLD_TEXT << ANSI_COLOR_BLUE << "~ e.what()" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ": " << ANSI_COLOR_YELLOW << "\"" << e.what() << "\"" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE 
+                  << "\n\t" << ANSI_BOLD_TEXT << ANSI_COLOR_BLUE << "~ e.code()" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ": " << ANSI_COLOR_YELLOW << "\"" << e.code().message() << "\"" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << std::endl;
     }
 }
 
 int main(int argc, char **argv) {
+    #ifdef _WIN32
+    if (!IsRunningAsAdmin()) {
+        std::cerr << ANSI_BOLD_TEXT << ANSI_COLOR_MAGENTA << "Warning" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ": The program is not running with administrative privileges.\n\t" 
+                  << ANSI_BOLD_TEXT << ANSI_COLOR_BLUE << "~ Application functionallity compromized." << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << std::endl;
+    }
+    #elif __linux__ || __APPLE__
+    if (!IsRunningAsRoot()) {
+        std::cerr << ANSI_BOLD_TEXT << ANSI_COLOR_MAGENTA << "Warning" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ": The program is not running with root privileges.\n\t" 
+                  << ANSI_BOLD_TEXT << ANSI_COLOR_BLUE << "~ Application functionallity compromized." << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << std::endl;
+    }
+    #else
+    std::cerr << ANSI_BOLD_TEXT << ANSI_COLOR_MAGENTA << "Warning" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ": Unsupported platform.\n\t" 
+                  << ANSI_BOLD_TEXT << ANSI_COLOR_BLUE << "~ Can not guarantee application functionallity." << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << std::endl;
+    #endif
+    
     if (argc < 2) {
         std::cerr << ANSI_BOLD_TEXT << ANSI_COLOR_YELLOW << "Usage" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ": " << argv[0] << " <file|folder|dir> <path>" << std::endl;
         return 1;
@@ -90,12 +142,13 @@ int main(int argc, char **argv) {
     }
 
     std::string arg(argv[1]);
+    std::filesystem::path input_path(argv[2]);
+    std::filesystem::path absolute_input_path = std::filesystem::absolute(input_path);
+
     if (arg == "file") {
-        std::string file_path(argv[2]);
-        copy_file(file_path);
+        copy_file(absolute_input_path);
     } else if (arg == "folder" || arg == "dir") {
-        std::string dir_path(argv[2]);
-        copy_directory(dir_path);
+        copy_directory(absolute_input_path);
     } else {
         std::cerr << ANSI_BOLD_TEXT << ANSI_COLOR_RED << "Error" << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << ": Unknown first argument.\n\t" 
                   << ANSI_BOLD_TEXT << ANSI_COLOR_BLUE << "~ Argument: " << ANSI_COLOR_GREEN << arg << ANSI_REGULAR_TEXT << ANSI_COLOR_WHITE << std::endl;
