@@ -1,11 +1,35 @@
 use clap::{Arg, ArgAction, Command};
+use std::env;
 use std::fs;
 use std::path::Path;
 use std::io::{self, Write};
 use colored::*;
+use fs_extra::dir::{copy as copy_dir, CopyOptions};
+use fs_extra::file::{copy as copy_file, CopyOptions as FileCopyOptions};
+
+#[cfg(target_os = "windows")]
+use winapi::um::shellapi::ShellExecuteW;
+#[cfg(target_os = "windows")]
+use winapi::um::winnt::LPCWSTR;
+#[cfg(target_os = "windows")]
+use std::ptr::null_mut;
+#[cfg(target_os = "windows")]
+use std::ffi::OsString;
+#[cfg(target_os = "windows")]
+use std::os::windows::ffi::OsStrExt;
+#[cfg(target_os = "windows")]
+use winapi::um::processthreadsapi::{GetCurrentProcess, OpenProcessToken};
+#[cfg(target_os = "windows")]
+use winapi::um::securitybaseapi::CheckTokenMembership;
+#[cfg(target_os = "windows")]
+use winapi::um::winnt::{HANDLE, TOKEN_QUERY, TOKEN_ELEVATION};
+#[cfg(target_os = "windows")]
+use winapi::shared::minwindef::BOOL;
+#[cfg(target_os = "windows")]
+use winapi::um::handleapi::CloseHandle;
 
 fn main() {
-    let matches = Command::new("cortex")
+    let matches = Command::new("xfetch")
         .version("0.1.0")
         .author("Neo Mannskär <neo.mannskar@gmail.com>")
         .about("File and Directory Management")
@@ -26,8 +50,8 @@ fn main() {
                 ),
         )
         .subcommand(
-            Command::new("copy")
-                .about("Copies a file or directory")
+            Command::new("import")
+                .about("Imports a file or directory")
                 .arg(
                     Arg::new("source")
                         .help("The source file or directory")
@@ -35,25 +59,17 @@ fn main() {
                 )
                 .arg(
                     Arg::new("destination")
-                        .help("The destination file or directory")
-                        .required(true),
-                ),
-        )
-        .subcommand(
-            Command::new("paste")
-                .about("Pastes a file or directory")
-                .arg(
-                    Arg::new("source")
-                        .help("The source file or directory")
-                        .required(true),
-                )
-                .arg(
-                    Arg::new("destination")
-                        .help("The destination file or directory")
-                        .required(true),
+                        .help("The destination directory")
+                        .required(false),
                 ),
         )
         .get_matches();
+
+    if !is_elevated() {
+        println!("Requesting elevated privileges...");
+        run_as_elevated();
+        return;
+    }
 
     if let Some(matches) = matches.subcommand_matches("create") {
         let path = matches.get_one::<String>("path").unwrap();
@@ -79,14 +95,10 @@ fn main() {
                 print_info("Success", &format!("File created: {}", path));
             }
         }
-    } else if let Some(matches) = matches.subcommand_matches("copy") {
+    } else if let Some(matches) = matches.subcommand_matches("import") {
         let source = matches.get_one::<String>("source").unwrap();
-        let destination = matches.get_one::<String>("destination").unwrap();
-        copy_item(source, destination);
-    } else if let Some(matches) = matches.subcommand_matches("paste") {
-        let source = matches.get_one::<String>("source").unwrap();
-        let destination = matches.get_one::<String>("destination").unwrap();
-        paste_item(source, destination);
+        let destination = matches.get_one::<String>("destination").map_or(".", |s| s.as_str());
+        import_path(source, destination);
     }
 }
 
@@ -104,47 +116,95 @@ fn ask_for_overwrite(path: &str) -> bool {
     matches!(response.trim(), "y" | "Y")
 }
 
-fn copy_item(source: &str, destination: &str) {
-    let src_path = Path::new(source);
-    let dest_path = Path::new(destination);
+fn import_path(src: &str, dest: &str) {
+    let src_path = Path::new(src);
+    let dest_path = Path::new(dest).join(src_path.file_name().unwrap());
 
-    if dest_path.exists() && !ask_for_overwrite(destination) {
-        print_warning("Skipped", &format!("Item not overwritten: {}", destination));
+    if dest_path.exists() && !ask_for_overwrite(dest) {
+        print_warning("Skipped", &format!("Item not overwritten: {}", dest));
         return;
     }
 
-    if src_path.is_dir() {
-        match fs::copy(source, destination) {
-            Ok(_) => print_info("Success", &format!("Directory copied to: {}", destination)),
-            Err(e) => print_error("Error", &format!("Failed to copy directory: {}", e)),
+    if src_path.is_file() {
+        let mut options = FileCopyOptions::new();
+        options.overwrite = true;
+        match copy_file(src_path, &dest_path, &options) {
+            Ok(_) => print_info("Success", &format!("File imported to: {}", dest)),
+            Err(e) => print_error("Error", &format!("Failed to import file: {}", e)),
+        }
+    } else if src_path.is_dir() {
+        let mut options = CopyOptions::new();
+        options.copy_inside = true;
+        options.overwrite = true;
+        match copy_dir(src_path, dest, &options) {
+            Ok(_) => print_info("Success", &format!("Directory imported to: {}", dest)),
+            Err(e) => print_error("Error", &format!("Failed to import directory: {}", e)),
         }
     } else {
-        match fs::copy(source, destination) {
-            Ok(_) => print_info("Success", &format!("File copied to: {}", destination)),
-            Err(e) => print_error("Error", &format!("Failed to copy file: {}", e)),
-        }
+        print_error("Error", "The specified path does not exist.");
     }
 }
 
-fn paste_item(source: &str, destination: &str) {
-    let src_path = Path::new(source);
-    let dest_path = Path::new(destination);
+#[cfg(target_os = "windows")]
+fn is_elevated() -> bool {
+    let mut is_elevated = false;
+    unsafe {
+        let mut token: HANDLE = null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) != 0 {
+            let mut elevation = TOKEN_ELEVATION {
+                TokenIsElevated: 0,
+            };
+            let mut is_member: BOOL = 0;
+            if CheckTokenMembership(null_mut(), &mut elevation as *mut _ as *mut _, &mut is_member) != 0 {
+                is_elevated = is_member != 0;
+            }
+            CloseHandle(token);
+        }
+    }
+    is_elevated
+}
 
-    if dest_path.exists() && !ask_for_overwrite(destination) {
-        print_warning("Skipped", &format!("Item not overwritten: {}", destination));
-        return;
+#[cfg(target_os = "windows")]
+fn run_as_elevated() {
+    use winapi::um::winuser::SW_SHOWNORMAL;
+    let args: Vec<String> = env::args().collect();
+    let mut args_wide: Vec<Vec<u16>> = args.iter().map(|arg| OsString::from(arg).encode_wide().collect()).collect();
+    for arg in &mut args_wide {
+        arg.push(0);
     }
 
-    if src_path.is_dir() {
-        match fs::copy(source, destination) {
-            Ok(_) => print_info("Success", &format!("Directory pasted to: {}", destination)),
-            Err(e) => print_error("Error", &format!("Failed to paste directory: {}", e)),
-        }
+    unsafe {
+        let lp_file: LPCWSTR = args_wide[0].as_ptr();
+        let lp_parameters: LPCWSTR = args_wide[1..].iter().flat_map(|arg| arg.iter()).cloned().collect::<Vec<u16>>().as_ptr();
+
+        ShellExecuteW(
+            null_mut(),
+            OsString::from("runas").encode_wide().chain(Some(0)).collect::<Vec<u16>>().as_ptr(),
+            lp_file,
+            lp_parameters,
+            null_mut(),
+            SW_SHOWNORMAL,
+        );
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_elevated() -> bool {
+    env::var("USER").map_or(false, |user| user == "root")
+}
+
+#[cfg(not(target_os = "windows"))]
+fn run_as_elevated() {
+    let args: Vec<String> = env::args().collect();
+    let status = std::process::Command::new("sudo")
+        .args(&args)
+        .status()
+        .expect("failed to execute process");
+
+    if status.success() {
+        println!("Elevated privileges granted.");
     } else {
-        match fs::copy(source, destination) {
-            Ok(_) => print_info("Success", &format!("File pasted to: {}", destination)),
-            Err(e) => print_error("Error", &format!("Failed to paste file: {}", e)),
-        }
+        println!("Failed to obtain elevated privileges.");
     }
 }
 
