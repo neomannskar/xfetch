@@ -30,3 +30,11 @@
 *.exe
 *.out
 *.app
+
+# Todo-lists
+*.todo
+
+
+# Added by cargo
+
+/target
