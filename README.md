@@ -4,21 +4,35 @@
 
 ## Installation and Building
 
-**xfetch** is a lightweight console application written in pure **C++17**. It has no external dependencies and can be compiled using your preferred C++ compiler, ensuring it supports the **C++17** standard or later.
+**xfetch** is a lightweight console application written in **Rust**. To get started, clone this repository and navigate to the newly created directory. Then, use the following commands to build and install **xfetch**.
 
-To get started, clone this repository and navigate to the newly created directory. Then, choose the appropriate command based on your compiler:
-### GCC
+### Building with Cargo
 
-```bash
-g++ -std=c++17 -o ./bin/xfetch ./src/main.cpp
-```
-### Clang
+Ensure you have [Rust and Cargo installed](https://www.rust-lang.org/tools/install).
 
 ```bash
-clang++ -std=c++17 -o ./bin/xfetch ./src/main.cpp
+git clone https://github.com/neomannskar/xfetch.git
+cd xfetch
+cargo build --release
 ```
 
-Once successfully compiled, add **xfetch** to your system's PATH variable.
+This will create an executable in the `target/release` directory. You can add this executable to your system's PATH variable for easy access.
+
+### Adding to PATH
+
+On Unix-like systems (Linux, macOS):
+
+```bash
+export PATH=$PATH:/path/to/xfetch/target/release
+```
+
+On Windows (PowerShell):
+
+```powershell
+$env:Path += ";C:\path\to\xfetch\target\release"
+```
+
+Replace `/path/to/xfetch/target/release` with the actual path to the `xfetch` executable.
 
 ## How to Use the Application
 
@@ -28,36 +42,48 @@ Once successfully compiled, add **xfetch** to your system's PATH variable.
 xfetch
 ```
 
-Running **xfetch** without any arguments prints out usage information (the path to the executable).
+Running **xfetch** without any arguments prints out usage information.
 
-Specify a type-specifier (`file` or `dir`) to indicate whether you are fetching a file or a directory.
+### Creating Files and Directories
 
-### File
+To create a file or directory, use the `create` subcommand.
 
-```bash
-xfetch file
-```
-
-### Directory
+### Creating a File
 
 ```bash
-xfetch dir
+xfetch create path/to/file.txt
 ```
 
-Alternatively, you can use `folder` as the type-specifier for directories if preferred.
+### Creating a Directory
 
 ```bash
-xfetch folder
+xfetch create path/to/directory
 ```
 
-Finally, provide the source path of the content you wish to import. For example:
+### Importing Files and Directories
+
+To import a file or directory, use the `import` subcommand. Specify the source path and optionally the destination directory. If no destination is provided, the current directory is used.
+
+### Importing a File
 
 ```bash
-xfetch file C:\dev\example\file.txt
+xfetch import path/to/source/file.txt
 ```
 
-_Note: **xfetch** imports content into the current directory of the application and implements safeguards against accidental overwrites, requiring user confirmation._
+### Importing a Directory
 
-## Future features
+```bash
+xfetch import path/to/source/directory
+```
 
-### 1. Path abstraction
+You can also specify a destination:
+
+```bash
+xfetch import path/to/source/file.txt path/to/destination
+```
+
+_Note: **xfetch** implements safeguards against accidental overwrites, requiring user confirmation._
+
+## Future Features
+
+### 1. Path Abstraction
